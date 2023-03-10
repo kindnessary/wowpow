@@ -1,0 +1,47 @@
+version: "3"
+services:
+  postgres:
+    image: postgres:13.1-alpine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wowserver"]
+      timeout: 45s
+      interval: 10s
+      retries: 10
+    restart: always
+    environment:
+      - POSTGRES_DB=wowserver
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - 5432:5432
+  flyway:
+    image: flyway/flyway
+    command: -url=jdbc:postgresql://postgres:5432/wowserver -connectRetries=5 migrate
+    environment:
+      - FLYWAY_USER=postgres
+      - FLYWAY_PASSWORD=postgres
+    volumes:
+      - ./cmd/wowserver/migration:/flyway/sql
+    depends_on:
+      - postgres
+
+  wowserver:
+    build: 
+      dockerfile: cmd/wowserver/Dockerfile
+    environment:
+      - POSTGRES_HOST=postgres
+      - DIFFICULTY=15
+      - CONNECTION_LIFETIME=1m
+    depends_on:
+      - flyway
+    restart: always
+  
+  wowclient:
+    build:
+      dockerfile: cmd/wowclient/Dockerfile
+    links:
+      - wowserver
+    environment:
+      - SERVER_ADDRESS=wowserver:8000
+      - NUM_OF_CLIENTS=50
+    depends_on:
+      - wowserver
